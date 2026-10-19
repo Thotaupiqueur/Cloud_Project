@@ -9,7 +9,7 @@ Plateforme éducative : LMS, wiki collaboratif et tableau de bord d'analyse. Auc
 
 ## Répartition du travail
 
-**Mon travail**
+**Notre travail**
 
 - Analyse du sujet et choix de l'architecture.
 - Déploiement de la stack initiale (Moodle, Apache Hop) et diagnostic des saturations mémoire sur ma VM Proxmox (2 Go de RAM).
@@ -25,7 +25,7 @@ Plateforme éducative : LMS, wiki collaboratif et tableau de bord d'analyse. Auc
 - Fichiers de provisioning Grafana (source de données, tableau de bord) et script `grafana-setup.sh`.
 - Corrections successives des erreurs que j'ai remontées (voir section 4).
 
-Je comprends et je peux expliquer chaque ligne du livrable. Les sections 3 et 4 détaillent ces choix.
+Nous comprenons et nous pouvons expliquer chaque ligne du livrable. Les sections 3 et 4 détaillent ces choix.
 
 ## Objectifs de la plateforme
 
@@ -53,7 +53,7 @@ Apache Hop tourne sur une JVM qui réserve de la mémoire dès le démarrage. Mo
 
 ### Décision
 
-Je conserve le besoin fonctionnel de chaque brique et je change les outils :
+On conserve le besoin fonctionnel de chaque brique et je change les outils :
 
 |Besoin|Sujet|Retenu|Raison|
 |---|---|---|---|
@@ -80,9 +80,9 @@ x-proxy-env: &proxy-env
   NO_PROXY: localhost,127.0.0.1,10.3.16.151,db,lms,wiki,analytics
 ```
 
-- Je définis les variables en minuscules et en majuscules. Les outils ne lisent pas la même casse (curl, Go, PHP, BusyBox).
+- On définis les variables en minuscules et en majuscules. Les outils ne lisent pas la même casse (curl, Go, PHP, BusyBox).
 - `no_proxy` exclut les noms de services et l'IP de la VM. Sans cette liste, le trafic entre conteneurs passerait par le proxy et échouerait.
-- WordPress ne lit pas les variables d'environnement pour ses propres appels HTTP. Je déclare donc le proxy dans `wp-config.php` avec `WORDPRESS_CONFIG_EXTRA` : `WP_PROXY_HOST`, `WP_PROXY_PORT` et `WP_PROXY_BYPASS_HOSTS`. WP-CLI en a besoin pour télécharger LearnPress.
+- WordPress ne lit pas les variables d'environnement pour ses propres appels HTTP. On déclare donc le proxy dans `wp-config.php` avec `WORDPRESS_CONFIG_EXTRA` : `WP_PROXY_HOST`, `WP_PROXY_PORT` et `WP_PROXY_BYPASS_HOSTS`. WP-CLI en a besoin pour télécharger LearnPress.
 - Incident : le healthcheck de Grafana utilisait `wget` de BusyBox. Cet outil applique `http_proxy` mais ignore `no_proxy`. Le test sur `127.0.0.1` partait vers le proxy et échouait. Le healthcheck exécute désormais `unset` sur les variables de proxy avant l'appel.
 
 ### Limitation de la mémoire
@@ -142,13 +142,13 @@ Le script est idempotent : chaque étape vérifie l'existence de la ressource av
 
 Le conteneur tourne avec `user: "33:33"`. Les fichiers du volume appartiennent à `www-data` (UID 33), et l'utilisateur par défaut de l'image CLI n'a pas le droit d'y écrire.
 
-Incident : la première version échouait avec « Error establishing a database connection » sur l'hôte `mysql`. Le `wp-config.php` de l'image WordPress lit `WORDPRESS_DB_HOST` à chaque exécution. Le conteneur `wp-setup` ne recevait pas cette variable et utilisait la valeur par défaut. J'ai ajouté les quatre variables `WORDPRESS_DB_*` à ce service.
+Incident : la première version échouait avec « Error establishing a database connection » sur l'hôte `mysql`. Le `wp-config.php` de l'image WordPress lit `WORDPRESS_DB_HOST` à chaque exécution. Le conteneur `wp-setup` ne recevait pas cette variable et utilisait la valeur par défaut. On a ajouté les quatre variables `WORDPRESS_DB_*` à ce service.
 
 ### `wiki-seed` : injection des pages DokuWiki
 
 Un conteneur `busybox` monte le volume `wiki-config`. Il attend que DokuWiki ait créé son dossier `data/pages`, puis copie `start.txt` et `architecture_unita.txt`. Le script ne remplace pas une page existante.
 
-Je n'ai pas monté les fichiers directement dans le volume du wiki. Docker aurait créé les dossiers avec les droits root avant l'initialisation de l'image `linuxserver/dokuwiki`, ce qui perturbe sa première configuration.
+On n'a pas monté les fichiers directement dans le volume du wiki. Docker aurait créé les dossiers avec les droits root avant l'initialisation de l'image `linuxserver/dokuwiki`, ce qui perturbe sa première configuration.
 
 Le nom de fichier est en minuscules : DokuWiki convertit les identifiants de pages en minuscules, et un fichier `Architecture_UNITA.txt` ne serait pas retrouvé.
 
@@ -169,7 +169,7 @@ grafana-provisioning/
 - **Tableau de bord** : `unita-analytics.json` contient 4 panneaux : nombre d'utilisateurs (`SELECT COUNT(ID) FROM wp_users`), nombre de cours publiés, inscriptions par jour, 10 derniers inscrits.
 - **Accès** : l'accès anonyme en lecture seule est activé, pour que le correcteur voie le tableau de bord sans se connecter.
 
-Incident : j'ai d'abord défini la page d'accueil avec `GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH`. Grafana répondait « Failed to load home dashboard ». Ce réglage est fragile selon les versions. Je l'ai remplacé par le conteneur `analytics-setup`. Il attend que le tableau de bord provisionné existe, puis appelle l'API `PUT /api/org/preferences` avec son identifiant (`homeDashboardUID`).
+Incident : On a d'abord défini la page d'accueil avec `GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH`. Grafana répondait « Failed to load home dashboard ». Ce réglage est fragile selon les versions. On l'a remplacé par le conteneur `analytics-setup`. Il attend que le tableau de bord provisionné existe, puis appelle l'API `PUT /api/org/preferences` avec son identifiant (`homeDashboardUID`).
 
 ### Résultat
 
