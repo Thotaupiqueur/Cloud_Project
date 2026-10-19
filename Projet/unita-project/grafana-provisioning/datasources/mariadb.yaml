@@ -1,0 +1,19 @@
+apiVersion: 1
+
+datasources:
+  - name: MariaDB-EduData
+    uid: mariadb-edudata
+    type: mysql
+    access: proxy
+    url: db:3306
+    user: edu_user
+    database: edudata
+    isDefault: true
+    editable: false
+    jsonData:
+      database: edudata
+      maxOpenConns: 5
+      maxIdleConns: 2
+      connMaxLifetime: 14400
+    secureJsonData:
+      password: ${EDU_DB_PASSWORD}

@@ -1,0 +1,35 @@
+====== Architecture UNITA ======
+
+Ce wiki documente l'environnement Cloud deploye pour l'alliance europeenne UNITA dans le cadre du projet ISANUM 2.
+
+===== Objectifs =====
+
+  * Fournir un ecosysteme educatif complet deployable en une seule commande : ''docker compose up -d''.
+  * Automatiser integralement la configuration (Infrastructure as Code, zero clic).
+  * Fonctionner dans des ressources memoire tres limitees, derriere un proxy universitaire.
+
+===== Services deployes =====
+
+^ Service ^ Role ^ Technologie ^ Port ^
+| lms | Ecosysteme educatif | WordPress + LearnPress | 9081 |
+| wiki | Intelligence collective | DokuWiki | 9082 |
+| analytics | Learning Analytics | Grafana | 9083 |
+| db | Base de donnees mutualisee | MariaDB 10.11 | interne |
+
+===== Choix d'architecture =====
+
+  * Moodle et Apache Hop (JVM) ont ete remplaces par WordPress/LearnPress et Grafana pour eviter les saturations memoire (OOM Killer).
+  * Chaque conteneur dispose d'une limite memoire stricte (''mem_limit'').
+  * Une seule base MariaDB alimente le LMS et les tableaux de bord Grafana.
+
+===== Automatisation =====
+
+  * **wp-setup** : conteneur ephemere WP-CLI qui installe WordPress, active LearnPress, cree 3 etudiants et des cours de demonstration.
+  * **wiki-seed** : conteneur ephemere qui injecte les pages de ce wiki.
+  * **Grafana provisioning** : source de donnees MariaDB et tableau de bord importes au demarrage.
+
+===== Acces =====
+
+  * LMS : http://10.3.16.151:9081
+  * Wiki : http://10.3.16.151:9082
+  * Analytics : http://10.3.16.151:9083

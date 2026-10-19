@@ -1,0 +1,72 @@
+x-proxy-env: &proxy-env
+  http_proxy: http://cache.univ-pau.fr:3128
+  https_proxy: http://cache.univ-pau.fr:3128
+  HTTP_PROXY: http://cache.univ-pau.fr:3128
+  HTTPS_PROXY: http://cache.univ-pau.fr:3128
+  no_proxy: localhost,127.0.0.1,10.3.16.151,db,lms,wiki,analytics
+  NO_PROXY: localhost,127.0.0.1,10.3.16.151,db,lms,wiki,analytics
+
+services:
+  db:
+    image: mariadb:10.11
+    environment:
+      MARIADB_ROOT_PASSWORD: root_securise
+      MARIADB_DATABASE: edudata
+      MARIADB_USER: edu_user
+      MARIADB_PASSWORD: edu_password
+    volumes:
+      - db-data:/var/lib/mysql
+    networks:
+      - unita-net
+
+  lms:
+    image: wordpress:latest
+    ports:
+      - "8081:80"
+    environment:
+      <<: *proxy-env
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_USER: edu_user
+      WORDPRESS_DB_PASSWORD: edu_password
+      WORDPRESS_DB_NAME: edudata
+    volumes:
+      - wp-data:/var/www/html
+    depends_on:
+      - db
+    networks:
+      - unita-net
+
+  wiki:
+    image: linuxserver/dokuwiki:latest
+    ports:
+      - "8082:80"
+    environment:
+      <<: *proxy-env
+      PUID: 1000
+      PGID: 1000
+    volumes:
+      - wiki-data:/config
+    networks:
+      - unita-net
+
+  analytics:
+    image: grafana/grafana-oss:latest
+    ports:
+      - "8083:3000"
+    environment:
+      <<: *proxy-env
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - db
+    networks:
+      - unita-net
+
+networks:
+  unita-net:
+
+volumes:
+  db-data:
+  wp-data:
+  wiki-data:
+  grafana-data:

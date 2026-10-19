@@ -1,0 +1,192 @@
+x-proxy-env: &proxy-env
+  http_proxy: http://cache.univ-pau.fr:3128
+  https_proxy: http://cache.univ-pau.fr:3128
+  HTTP_PROXY: http://cache.univ-pau.fr:3128
+  HTTPS_PROXY: http://cache.univ-pau.fr:3128
+  no_proxy: localhost,127.0.0.1,10.3.16.151,db,lms,wiki,analytics
+  NO_PROXY: localhost,127.0.0.1,10.3.16.151,db,lms,wiki,analytics
+
+services:
+  db:
+    image: mariadb:10.11
+    mem_limit: 320m
+    command:
+      - --innodb-buffer-pool-size=64M
+      - --max-connections=40
+      - --performance-schema=OFF
+    environment:
+      <<: *proxy-env
+      MARIADB_ROOT_PASSWORD: root_securise
+      MARIADB_DATABASE: edudata
+      MARIADB_USER: edu_user
+      MARIADB_PASSWORD: edu_password
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 12
+    restart: unless-stopped
+    networks:
+      - unita-net
+
+  lms:
+    image: wordpress:latest
+    mem_limit: 320m
+    ports:
+      - "9081:80"
+    environment:
+      <<: *proxy-env
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: edudata
+      WORDPRESS_DB_USER: edu_user
+      WORDPRESS_DB_PASSWORD: edu_password
+      WORDPRESS_CONFIG_EXTRA: |
+        define('WP_HOME', 'http://10.3.16.151:9081');
+        define('WP_SITEURL', 'http://10.3.16.151:9081');
+        define('WP_PROXY_HOST', 'cache.univ-pau.fr');
+        define('WP_PROXY_PORT', '3128');
+        define('WP_PROXY_BYPASS_HOSTS', 'localhost,127.0.0.1,10.3.16.151,db,lms,wiki,analytics');
+    volumes:
+      - wp-data:/var/www/html
+      - ./lms-config/apache-tuning.conf:/etc/apache2/conf-enabled/zz-tuning.conf:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "php -r 'exit(@fsockopen(\"127.0.0.1\", 80) ? 0 : 1);'"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 18
+    restart: unless-stopped
+    networks:
+      - unita-net
+
+  wp-setup:
+    image: wordpress:cli
+    mem_limit: 192m
+    user: "33:33"
+    entrypoint: ["/bin/sh", "/scripts/wp-setup.sh"]
+    environment:
+      <<: *proxy-env
+      HOME: /tmp
+      WP_CLI_CACHE_DIR: /tmp/wp-cli-cache
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: edudata
+      WORDPRESS_DB_USER: edu_user
+      WORDPRESS_DB_PASSWORD: edu_password
+      WP_URL: http://10.3.16.151:9081
+      WP_TITLE: UNITA Education Cloud
+      WP_ADMIN_USER: admin
+      WP_ADMIN_PASSWORD: Admin-Unita-2025
+      WP_ADMIN_EMAIL: admin@unita.local
+      WP_STUDENT_PASSWORD: Etudiant-Unita-2025
+    volumes:
+      - wp-data:/var/www/html
+      - ./scripts:/scripts:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      lms:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - unita-net
+
+  wiki:
+    image: linuxserver/dokuwiki:latest
+    mem_limit: 160m
+    ports:
+      - "9082:80"
+    environment:
+      <<: *proxy-env
+      PUID: 1000
+      PGID: 1000
+      TZ: Europe/Paris
+    volumes:
+      - wiki-config:/config
+    restart: unless-stopped
+    networks:
+      - unita-net
+
+  wiki-seed:
+    image: busybox:stable
+    mem_limit: 16m
+    entrypoint: ["/bin/sh", "/scripts/wiki-seed.sh"]
+    environment:
+      <<: *proxy-env
+      PUID: 1000
+      PGID: 1000
+    volumes:
+      - wiki-config:/config
+      - ./scripts:/scripts:ro
+      - ./wiki-seed:/seed:ro
+    depends_on:
+      wiki:
+        condition: service_started
+    restart: "no"
+    networks:
+      - unita-net
+
+  analytics:
+    image: grafana/grafana-oss:latest
+    mem_limit: 256m
+    ports:
+      - "9083:3000"
+    environment:
+      <<: *proxy-env
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: Admin-Unita-2025
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      EDU_DB_PASSWORD: edu_password
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana-provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana-provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY; wget -q -O /dev/null http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 8
+    restart: unless-stopped
+    networks:
+      - unita-net
+
+  analytics-setup:
+    image: curlimages/curl:latest
+    mem_limit: 16m
+    entrypoint: ["/bin/sh", "/scripts/grafana-setup.sh"]
+    environment:
+      <<: *proxy-env
+      GRAFANA_URL: http://analytics:3000
+      GRAFANA_USER: admin
+      GRAFANA_PASSWORD: Admin-Unita-2025
+      DASHBOARD_UID: unita-analytics
+    volumes:
+      - ./scripts:/scripts:ro
+    depends_on:
+      analytics:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - unita-net
+
+volumes:
+  db-data:
+  wp-data:
+  wiki-config:
+  grafana-data:
+
+networks:
+  unita-net:
